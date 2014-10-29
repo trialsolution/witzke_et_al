@@ -60,7 +60,7 @@ table   p_null(i, r)   "price in the base year"
 table   x_null(i, r)   "demand in the base year"
 
               n          r
-      i1     100         1
+      i1     100         1.E-4
 ;
 
 table    p_calib(i,r)  "hypothetical prices in the emerging trade flow (assumption)"
@@ -172,49 +172,40 @@ equations
 
 
 *  allow for non-zero commitment parameters for country 'r'
-  v_mu.l(i, 'r')    = 1;
+*  the commitment term is negative in our case
+  v_mu.l(i, 'r')    = - 1;
   v_mu.lo(i, 'r')   = -inf;
-  v_mu.up(i, 'r')   = +inf;
+  v_mu.up(i, 'r')   = 0;
 
 
  CES.solprint = 1;
  solve CES using CNS;
- if(CES.numinfes ne 0, abort "problem with modified calibration");
+ if(CES.numinfes ne 0, abort "problem with calibration model (commitment version)");
 
 
  delta(i,r,"modified") =  v_delta.L(i,r);
  mu(i,r,"modified")    =  v_mu.L(i,r);
 
-display "check calibration parameters", delta, mu;
-
-
-*
-*   --- Run test scenario
-*
-
-
+display "check calibration parameters", delta, mu, rho, sigma;
 
 *
-*   ---   Simulation model
+*   ---   Test calibration
 *
-
-parameters
-  price(i,r)  "current price in simulation (exogenous)"
-;
-
-
-
-
+*   ---   Define a separate model for simulations
+*         and test it in the 'assumed' point
 *
-*   ---   Define a simulation model
 *         The reason why we need a new model is that the composite price & quantity
-*         variables above were dependent on the calibration points ("points").
+*         variables have an additional dimension above:
+*         they are dependent on the calibration points ("points").
 *
 variables
   v_sim_W(i)       "composite price index in simulations"
   v_sim_x(i,r)     "import demand in simulations"
 ;
 
+parameters
+  price(i,r)  "current price in simulation (exogenous)"
+;
 
 equations
   sim_price_index(i)
@@ -247,9 +238,33 @@ model CES_sim /sim_price_index, sim_import_demand/;
   price(i,"n")     = 1;
   price(i,"r")     = .25;
 
-
+CES_sim.solprint = 1;
 solve CES_sim using CNS;
+if(CES_sim.numinfes ne 0, abort "problem with the test simulation model");
 
+* -- test if sthe solution matches the expectation
+if(sum((i), abs(v_sim_x.l(i,"r") - x_calib(i,"r"))) gt 1.E-2,
+  abort "problem with reproducing the assumed calibration point ", v_sim_x.l, x_calib;
+ );
+
+
+*
+*   --- Note that the import quantity from region "n"
+*       will not be the same as x_calib!
+*       The reasoning is the following:
+*       - fixing delta.fx = 1 for this region implies that
+*         the price index will differ from the originally set 1
+*       - under the assumption of fix utility this implies
+*         a different total expenditure (Y)
+*       - although the value share are reproduced, the values themselves not
+*       - dividing the import values with the fix price we get
+*         a different quantity compared to x_calib
+*
+
+
+
+*
+*   ---  Part II.
 *
 *   ---  Sensitivity analysis with the scenario solver
 *        The relative price of imports from region "r"
@@ -272,7 +287,7 @@ parameter
 *   --- Relative price of imports from region "r" are set in [0.05,0.5]
 *       The setlocal N defines the number of observations
 *
-  ps_price(scen, i, "r") = .45 * 1/(%N%-1) * (ord(scen)-1) + .05;
+  ps_price(scen, i, "r") = .45 * 1/(%N%-1) * (ord(scen)-1) + .01;
   ps_price(scen, i, "n") = 1;
 
 set scen_dict   "scenario dictionary (for the GUSS solver option)"
@@ -351,6 +366,7 @@ putclose
    'set ylabel "relative price of good from region r"'/
    'set title "Comparison of demand functions (standard vs. commitment versions)"'/
    'set key off'/
+   'set xrange [0:100]'/
    'set term png font arial 13'/
    'set output "plot.png"'/
 
