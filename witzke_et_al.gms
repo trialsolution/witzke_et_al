@@ -264,6 +264,23 @@ if(sum((i), abs(v_sim_x.l(i,"r") - x_calib(i,"r"))) gt 1.E-2,
 
 
 *
+*   ---  check value shares and total expenditure in the test run
+*        The value shares are not fully reproduced, as the
+*        calibration is made exact to the x_calib quantities.
+*
+parameter
+           p_check_vs(i,r)  "simulated value shares"
+           p_check_Y        "check simulated total expenditure"
+;
+ p_check_Y       = sum((i,r), v_sim_x.l(i,r) * price(i,r));
+ p_check_vs(i,r) = v_sim_x.l(i,r) * price(i,r) / p_check_Y;
+
+*abort "check", p_check_Y, p_check_vs, Y, share;
+
+
+
+
+*
 *   ---  Part II.
 *
 *   ---  Sensitivity analysis with the scenario solver
@@ -365,12 +382,12 @@ putclose
    'set xlabel "import demand"'/
    'set ylabel "relative price of good from region r"'/
    'set title "Comparison of demand functions (standard vs. commitment versions)"'/
-   'set key off'/
+*   'set key off'/
    'set xrange [0:100]'/
    'set term png font arial 13'/
    'set output "plot.png"'/
 
-   'plot "plot.dat" using 1:2 with lines, "plot.dat" using 3:4 with lines'
+   'plot "plot.dat" using 1:2 title "standard" with lines, "plot.dat" using 3:4 title "commitment" with lines'
 ;
 
 
