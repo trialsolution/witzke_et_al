@@ -50,6 +50,12 @@ Icon
 # gams related
 *.lst
 *.gdx
+*.gch
 
 # KEDIT
 *.bak
+
+# related to plots
+*.png
+*.plt
+*.dat
