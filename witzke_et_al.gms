@@ -19,11 +19,17 @@ $offtext
 $offlisting
 
 
+*
+*   --- The calibration approach requires two points (price/quantity) in time:
+*       (1) historical observation
+*       (2) expectation (assumption) on price/quantity pair
+*
+
 sets
-  i "commodity groups" /i1/
-  r "source of imports (origin)" /n, r/
-  points "calibration points" /data, assumption/
-  approaches "calibration approaches" /standard, modified/
+  i           "commodity groups" /i1/
+  r           "source of imports (origin)" /n, r/
+  points      "calibration points" /data, assumption/
+  approaches  "calibration approaches" /standard, modified/
 ;
 
 alias(i, ii);
@@ -54,7 +60,7 @@ table   p_null(i, r)   "price in the base year"
 table   x_null(i, r)   "demand in the base year"
 
               n          r
-      i1     100        1.E-4
+      i1     100         1
 ;
 
 table    p_calib(i,r)  "hypothetical prices in the emerging trade flow (assumption)"
@@ -81,8 +87,8 @@ variables
 
 
 equations
-  price_index(i, points)               "price index"
-  import_demand(i, r, points)           "optimal import demand, F.O.C. of expenditure minimization under fix utility"
+  price_index(i, points)       "price index"
+  import_demand(i, r, points)  "optimal import demand, F.O.C. of expenditure minimization under fix utility"
 ;
 
   price_index(i, points) $ v_W.range(i,points) ..
@@ -135,11 +141,15 @@ equations
  mu(i, r, "standard")        = 0;
  v_mu.fx(i,r)                = 0;
 
+ CES.holdfixed = 1;
+ CES.solprint = 1;
  solve CES using CNS;
 
+ if(CES.numinfes ne 0, abort "problem with standard calibration");
+
+
+* save share parameters in the standard case
  delta(i,r,"standard") =  v_delta.L(i,r);
-
-
 
 *
 *   ---  Calibrate the CES funciton, modified version
@@ -166,13 +176,16 @@ equations
   v_mu.lo(i, 'r')   = -inf;
   v_mu.up(i, 'r')   = +inf;
 
+
+ CES.solprint = 1;
  solve CES using CNS;
+ if(CES.numinfes ne 0, abort "problem with modified calibration");
+
 
  delta(i,r,"modified") =  v_delta.L(i,r);
  mu(i,r,"modified")    =  v_mu.L(i,r);
 
 display "check calibration parameters", delta, mu;
-
 
 
 *
@@ -189,9 +202,17 @@ parameters
   price(i,r)  "current price in simulation (exogenous)"
 ;
 
+
+
+
+*
+*   ---   Define a simulation model
+*         The reason why we need a new model is that the composite price & quantity
+*         variables above were dependent on the calibration points ("points").
+*
 variables
-  v_sim_W(i)
-  v_sim_x(i,r)
+  v_sim_W(i)       "composite price index in simulations"
+  v_sim_x(i,r)     "import demand in simulations"
 ;
 
 
@@ -207,6 +228,8 @@ equations
   sim_import_demand(i,r)  ..
     v_sim_x(i,r) =e= v_utility(i) * v_delta(i,r) ** sigma(i) * (price(i,r)/v_sim_W(i)) ** (-sigma(i))
       + v_mu(i,r);
+
+
 
 model CES_sim /sim_price_index, sim_import_demand/;
 
@@ -229,7 +252,8 @@ solve CES_sim using CNS;
 
 *
 *   ---  Sensitivity analysis with the scenario solver
-*
+*        The relative price of imports from region "r"
+*        are varied in a range.
 
 *  number of price experiments
 $setlocal N 100
@@ -244,6 +268,10 @@ parameter
   ps_x(scen, i, r)        "import demands"
 ;
 
+*
+*   --- Relative price of imports from region "r" are set in [0.05,0.5]
+*       The setlocal N defines the number of observations
+*
   ps_price(scen, i, "r") = .45 * 1/(%N%-1) * (ord(scen)-1) + .05;
   ps_price(scen, i, "n") = 1;
 
@@ -261,8 +289,8 @@ set scen_dict   "scenario dictionary (for the GUSS solver option)"
 
   v_delta.fx(i,r) = delta(i,r,"standard");
   v_mu.fx(i,r)    = mu(i,r,"standard");
-  v_sim_W.l(i)   = 1;
-  v_sim_x.l(i,r) = 1;
+  v_sim_W.l(i)    = 1;
+  v_sim_x.l(i,r)  = 1;
 
 solve CES_sim using CNS scenario scen_dict;
 
@@ -289,5 +317,53 @@ p_results(scen, i, r, "x", "modified") = ps_x(scen,i,r);
 
 display p_results;
 
+execute_unload "witzke_et_al.gdx", p_results;
 
+
+
+
+*
+*   --- Prepare plot
+*
+
+*
+*   --- Put data points in a .dat file
+*
+file datafile /plot.dat/;
+put datafile;
+loop(scen,
+   put p_results(scen, "i1", "r", "x", "standard"):10:2;
+   put ' ',p_results(scen, "i1", "r", "p", "standard"):10:2;
+   put ' ',p_results(scen, "i1", "r", "x", "modified"):10:2;
+   put ' ',p_results(scen, "i1", "r", "p", "modified"):10:2;
+   put /;
+);
+putclose;
+
+
+*
+*   --- Prepare GNUPLOT script
+*
+file pltfile /plot.plt/;
+put pltfile;
+putclose
+   'set xlabel "import demand"'/
+   'set ylabel "relative price of good from region r"'/
+   'set title "Comparison of demand functions (standard vs. commitment versions)"'/
+   'set key off'/
+   'set term png font arial 13'/
+   'set output "plot.png"'/
+
+   'plot "plot.dat" using 1:2 with lines, "plot.dat" using 3:4 with lines'
+;
+
+
+* sets and parameters for gnuplotxyz
+$setlocal gnuplot_path 'S:\util\gnuplot\bin\'
+
+* Use Gnuplot to generate picture
+execute 'call %gnuplot_path%gnuplot plot.plt';
+
+* Use mspaint(Windows) to open image file
+execute 'mspaint plot.png';
 
