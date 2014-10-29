@@ -34,3 +34,22 @@ Icon
 # Files that might appear on external disk
 .Spotlight-V100
 .Trashes
+
+
+# =========================
+# Customization
+# =========================
+
+# Gtree related
+*.~gms*
+*.ref
+*.sch
+*.template
+*.gref
+
+# gams related
+*.lst
+*.gdx
+
+# KEDIT
+*.bak
