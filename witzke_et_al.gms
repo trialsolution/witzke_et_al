@@ -186,7 +186,7 @@ equations
  delta(i,r,"modified") =  v_delta.L(i,r);
  mu(i,r,"modified")    =  v_mu.L(i,r);
 
-display "check calibration parameters", delta, mu, rho, sigma;
+*display "check calibration parameters", delta, mu, rho, sigma;
 
 *
 *   ---   Test calibration
@@ -230,9 +230,15 @@ model CES_sim /sim_price_index, sim_import_demand/;
   v_delta.fx(i,r) = delta(i,r,"modified");
   v_mu.fx(i,r)    = mu(i,r,"modified");
 
+
+*
+*   --- test 1: test the calibrated CES (w. commitment term) in the expected point
+*
+
 *  initialize variables
   v_sim_W.l(i)   = 1;
   v_sim_x.l(i,r) = 1;
+
 
 *  price assumption
   price(i,r)     = p_calib(i,r);
@@ -245,6 +251,28 @@ if(CES_sim.numinfes ne 0, abort "problem with the test simulation model");
 if(sum((i), abs(v_sim_x.l(i,"r") - x_calib(i,"r"))) gt 1.E-2,
   abort "problem with reproducing the assumed calibration point ", v_sim_x.l, x_calib;
  );
+
+
+*
+*   --- test 2: test the calibrated CES (w. commitment term) in the observed point
+*
+
+*  initialize variables
+  v_sim_W.l(i)   = 1;
+  v_sim_x.l(i,r) = 1;
+
+*  price assumption
+  price(i,r)     = p_null(i,r);
+
+CES_sim.solprint = 1;
+solve CES_sim using CNS;
+if(CES_sim.numinfes ne 0, abort "problem with the test simulation model");
+
+* -- test if sthe solution matches the expectation
+if(sum((i), abs(v_sim_x.l(i,"r") - x_null(i,"r"))) gt 1.E-2,
+  abort "problem with reproducing the observed calibration point ", v_sim_x.l, x_calib;
+ );
+*$exit
 
 
 *
