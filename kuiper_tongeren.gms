@@ -7,13 +7,17 @@ $ontext
                Objective
                ---------
 
-               Implement a different modified Armington approach using
-               the numerical example in Witzke et al. conference paper
+               Implement a didactic example for the modified Armington approach 
+               in the Kuiper-Tongeren paper.
+
+               The numerical example is based on the one in 
+               Witzke et al. conference paper
                "Modelling EU sugar market scenarios
                with a modified Armington approach".
 
-               This different approach is the one of Kuiper-Tongeren (2006)
-               dealing with the small share problem (originally in GTAP)
+               The Kuiper-Tongeren (2006) approach is designed to 
+               deal with the small share problem 
+               (originally with a focus on applications with GTAP).
 
                One of the issues is to convert their linearized formulas
                back to the level form.
@@ -66,6 +70,8 @@ parameters
   mu(i, r, approaches)          "commitment parameter"
   delta(i, r, approaches)       "CES share parameter (storage)"
   theta(i, r, approaches)       "factor augmenting t. change parameter (storage)"
+  bigtheta1(i, r, approaches)   "auxiliary parameter (storage)"
+  bigtheta2(i, r, approaches)   "auxiliary parameter (storage)"
   U(i)                          "utility from consuming the commodity group i"
   p(i,r,points)                 "(shadow) prices"
 ;
@@ -85,7 +91,7 @@ table   p_null(i, r)   "price in the base year"
 table   x_null(i, r)   "demand in the base year"
 
               n          r
-      i1     100         2
+      i1      99         2
 ;
 
 table    p_calib(i,r)  "hypothetical prices in the emerging trade flow (assumption)"
@@ -107,7 +113,7 @@ variables
   v_x(i,r,points)              "import demand"
   v_delta(i,r)                 "CES share parameters (for calibration)"
   v_W(i,points)                "price index"
-  v_H(i)                "Hicks neutral technical change parameters"
+  v_H(i)                       "Hicks neutral technical change parameters"
   v_theta(i,r)                 "factor augmenting tech. change (equivalent term with respect to utility function?)"
   v_bigtheta1(i,r)
   v_bigtheta2(i,r)
@@ -117,8 +123,8 @@ variables
 equations
   price_index(i, points)       "price index"
   import_demand(i, r, points)  "optimal import demand, F.O.C. of expenditure minimization under fix utility"
-  big_theta1(i,r)
-  big_theta2(i,r)
+  big_theta1(i,r)              "auxiliary equation to decrease the number of use of the exponential function x^sigma"
+  big_theta2(i,r)              "auxiliary equation to decrease the number of use of the exponential function x^sigma"
 ;
 
   price_index(i, points) $ v_W.range(i,points) ..
@@ -140,24 +146,21 @@ equations
  model CES /import_demand, price_index, big_theta1, big_theta2 /;
 
 
-
 *
 *   --- without loss of generality, one of the delta's is set to unity
 *       (changing this would only cause a different scaling (monotone transformation)
-*        in the utility but do not change the utility ordering)
+*        in the utility, but would not change the utility ordering)
 *
 
  delta(i, "n", approaches) = 1;
 
 *
-*   ---  set benchmark utility level equal to total consumption
-*        utility does not change throughout the calibration
+*   ---  set benchmark utility level equal to total consumption.
+*        Utility does not change throughout the calibration
 *
 
  U(i)                 = sum(r, x_null(i,r));
  v_utility.fx(i)      = U(i);
-
-
 
 
 *  demand
@@ -170,7 +173,8 @@ equations
  v_W.L(i,"data")             = 1;
 
 *  by fixing the price index we switch off the price index equation
-*  for the 'assumed' calibration point (not included in the standard case)
+*  for the 'assumed' calibration point 
+*  (not part of the standard CES approach that only requires one observation and an exogenous subst. elasticity)
  v_W.fx(i,"assumption")      = 1;
 
 *  CES share parameters are non-negative
@@ -182,14 +186,14 @@ equations
 
 
 *  Hicks neutral technical change parameter fixed to 1 in the standard case
- v_H.fx(i)            = 1;
+ v_H.fx(i)                  = 1;
 *  factor augmenting tech. change fixed to 1 in the standard case
  v_theta.fx(i,r)             = 1;
-
+*  auxiliary varaibles fixed
  v_bigtheta1.fx(i,r) = v_delta.l(i,r)**sigma(i) * v_theta.l(i,r)**(sigma(i) - rho(i));
  v_bigtheta2.fx(i,r) = (v_delta.l(i,r) * v_theta.l(i,r)**rho(i)) ** sigma(i);
 
-* free the bigtheta variables for region "r"
+* free the auxiliary variables for region "r" (linked to the usual CES calibrated share parameters)
  v_bigtheta1.lo(i,"r")   =  0;
  v_bigtheta1.up(i,"r")   =  +inf;
  v_bigtheta2.lo(i,"r")   =  0;
@@ -204,13 +208,17 @@ equations
 *$exit
 
 * save share parameters in the standard case
- delta(i,r,"standard") =  v_delta.L(i,r);
+ delta(i,r,"standard")           =  v_delta.L(i,r);
+ theta(i,r,"standard")           =  v_theta.l(i,r);
+ bigtheta1(i,r,"standard")       =  v_bigtheta1.l(i,r);
+ bigtheta2(i,r,"standard")       =  v_bigtheta2.l(i,r);
+
 
 *
-*   ---  Calibration to expected (non-zero) trade with region "r"
+*   ---  2nd Calibration: to expected (non-zero) trade with region "r"
 *
 
-
+*  calculate demand quantities from the expected expenditure shares
  parameter x_calib(i,r) "demand in the second calibration point (assumption)";
  x_calib(i,r) = share(i,r,"assumption") * Y / p_calib(i,r);
 
@@ -224,8 +232,7 @@ equations
   v_W.l(i,"assumption")             = 1;
 
 
-*  the non-neutral techn. change parameter gives the missing degree of freedom
-*  for the calibration
+*  the non-neutral techn. change parameter provides the missing degree of freedom
   v_theta.lo(i,"r")           = 0.01;
   v_theta.up(i,"r")           = +inf;
 
@@ -239,8 +246,13 @@ equations
 
 *$exit
 
- delta(i,r,"modified") =  v_delta.l(i,r);
- theta(i,r,"modified") =  v_theta.l(i,r);
+*
+*   --- save calibrated parameters
+*
+ delta(i,r,"modified")           =  v_delta.l(i,r);
+ theta(i,r,"modified")           =  v_theta.l(i,r);
+ bigtheta1(i,r,"modified")       =  v_bigtheta1.l(i,r);
+ bigtheta2(i,r,"modified")       =  v_bigtheta2.l(i,r);
 *display "check calibration parameters", delta, mu, rho, sigma;
 
 *
@@ -249,7 +261,7 @@ equations
 *   ---   Define a separate model for simulations
 *         and test it in the 'assumed' point
 *
-*         The reason why we need a new model is that the composite price & quantity
+*   Note: The reason why we need a new model is that the composite price & quantity
 *         variables have an additional dimension above:
 *         they are dependent on the calibration points ("points").
 *
@@ -263,8 +275,8 @@ parameters
 ;
 
 equations
-  sim_price_index(i)
-  sim_import_demand(i,r)
+  sim_price_index(i)               "price index in simulations"
+  sim_import_demand(i,r)           "import demand equations in simulations"
 ;
 
 
@@ -288,14 +300,17 @@ model CES_sim /sim_price_index, sim_import_demand, big_theta1, big_theta2/;
   v_bigtheta2.fx(i,r)  = v_bigtheta2.l(i,r);
 
 
+* initialize variables
 
-*  initialize variables
   v_sim_W.l(i)   = 1;
-  v_sim_x.l(i,r) = 1;
+  v_sim_x.l(i,r) = x_calib(i,r);
+
 
 *  price assumption
-  price(i,"n")     = 1;
-  price(i,"r")     = .25;
+
+  price(i,r)     = p_calib(i,r);
+
+
 
 CES_sim.solprint = 1;
 solve CES_sim using CNS;
@@ -307,20 +322,20 @@ if(sum((i), abs(v_sim_x.l(i,"r") - x_calib(i,"r"))) gt 1.E-2,
  );
 
 *$exit
+
+
 *
 *   --- Note that the import quantity from region "n"
 *       will not be the same as x_calib!
 *       The reasoning is the following:
 *       - fixing delta.fx = 1 for this region implies that
-*         the price index will differ from the originally set 1
+*         the price index will differ from unity 
 *       - under the assumption of fix utility this implies
 *         a different total expenditure (Y)
-*       - although the value share are reproduced, the values themselves not
+*       - => although the value shares are reproduced, the values themselves are not
 *       - dividing the import values with the fix price we get
 *         a different quantity compared to x_calib
 *
-
-
 
 *
 *   ---  check value shares and total expenditure in the test run
@@ -334,7 +349,7 @@ parameter
  p_check_Y       = sum((i,r), v_sim_x.l(i,r) * price(i,r));
  p_check_vs(i,r) = v_sim_x.l(i,r) * price(i,r) / p_check_Y;
 
-*abort "check", p_check_Y, p_check_vs, Y, share;
+*abort "check", p_check_Y, p_check_vs, Y, share, x_calib;
 
 
 
@@ -378,10 +393,12 @@ set scen_dict   "scenario dictionary (for the GUSS solver option)"
 
 *  standard Armington approach
 
-  v_delta.fx(i,r) = delta(i,r,"standard");
-  v_theta.fx(i,r) = 1;
-  v_sim_W.l(i)    = 1;
-  v_sim_x.l(i,r)  = 1;
+  v_delta.fx(i,r)        = delta(i,r,"standard");
+  v_theta.fx(i,r)        = theta(i,r,"standard");
+  v_bigtheta1.fx(i,r)    = bigtheta1(i,r,"standard");
+  v_bigtheta2.fx(i,r)    = bigtheta2(i,r,"standard");
+  v_sim_W.l(i)           = 1;
+  v_sim_x.l(i,r)         = 1;
 
 solve CES_sim using CNS scenario scen_dict;
 
@@ -393,10 +410,12 @@ p_results(scen, i, r, "x", "standard") = ps_x(scen,i,r);
 
 *  Modified Armington approach
 
-  v_delta.fx(i,r) = delta(i,r,"modified");
-  v_theta.fx(i,r) = theta(i,r,"modified");
-  v_sim_W.l(i)   = 1;
-  v_sim_x.l(i,r) = 1;
+  v_delta.fx(i,r)        = delta(i,r,"modified");
+  v_theta.fx(i,r)        = theta(i,r,"modified");
+  v_bigtheta1.fx(i,r)    = bigtheta1(i,r,"modified");
+  v_bigtheta2.fx(i,r)    = bigtheta2(i,r,"modified");
+  v_sim_W.l(i)           = 1;
+  v_sim_x.l(i,r)         = 1;
 
 solve CES_sim using CNS scenario scen_dict;
 
@@ -440,13 +459,13 @@ put pltfile;
 putclose
    'set xlabel "import demand"'/
    'set ylabel "relative price of good from region r"'/
-   'set title "Comparison of demand functions (standard vs. commitment versions)"'/
+   'set title "Comparison of demand functions (standard vs. kuiper-tongeren)"'/
 *   'set key off'/
    'set xrange [0:100]'/
    'set term png font arial 13'/
    'set output "plot_kuiper.png"'/
 
-   'plot "plot_kuiper.dat" using 1:2 title "standard" with lines, "plot_kuiper.dat" using 3:4 title "commitment" with lines'
+   'plot "plot_kuiper.dat" using 1:2 title "standard" with lines, "plot_kuiper.dat" using 3:4 title "kuiper-tongeren" with lines'
 ;
 
 

@@ -60,7 +60,7 @@ table   p_null(i, r)   "price in the base year"
 table   x_null(i, r)   "demand in the base year"
 
               n          r
-      i1     100         1.E-4
+      i1      99         2 
 ;
 
 table    p_calib(i,r)  "hypothetical prices in the emerging trade flow (assumption)"
@@ -175,13 +175,13 @@ equations
 *  the commitment term is negative in our case
   v_mu.l(i, 'r')    = - 1;
   v_mu.lo(i, 'r')   = -inf;
-  v_mu.up(i, 'r')   = 0;
+  v_mu.up(i, 'r')   = +inf;
 
 
  CES.solprint = 1;
  solve CES using CNS;
  if(CES.numinfes ne 0, abort "problem with calibration model (commitment version)");
-
+*$exit
 
  delta(i,r,"modified") =  v_delta.L(i,r);
  mu(i,r,"modified")    =  v_mu.L(i,r);
@@ -235,8 +235,7 @@ model CES_sim /sim_price_index, sim_import_demand/;
   v_sim_x.l(i,r) = 1;
 
 *  price assumption
-  price(i,"n")     = 1;
-  price(i,"r")     = .25;
+  price(i,r)     = p_calib(i,r);
 
 CES_sim.solprint = 1;
 solve CES_sim using CNS;
@@ -275,7 +274,7 @@ parameter
  p_check_Y       = sum((i,r), v_sim_x.l(i,r) * price(i,r));
  p_check_vs(i,r) = v_sim_x.l(i,r) * price(i,r) / p_check_Y;
 
-*abort "check", p_check_Y, p_check_vs, Y, share;
+*abort "check", p_check_Y, p_check_vs, Y, share, x_calib;
 
 
 
