@@ -1,8 +1,8 @@
 $ontext
   test different CES functional forms
 
-  1) NOT including productivity multiplier term (gamma)
-  2) including productivity multiplier term (gamma)
+  1) NOT including productivity multiplier term (gamma) -- version 1 below
+  2) including productivity multiplier term (gamma)     -- version 2 below
   3) using a modified CES function form with commitment-terms
 
   - by including gamma we can force the adding up condition on the deltas
@@ -18,6 +18,7 @@ $ontext
                   “Modelling EU Sugar Market Scenarios with a Modified Armington Appoach.” In IATRC Symposium. Sevilla, Spain.
 $offtext
 
+$offlisting
 
 *1) with our without the gamma term (productivity mulitplier)
 
@@ -36,6 +37,8 @@ $offtext
  pnull(i)    = uniform(0.5,1);
  xnull(i)    = uniform(0.5,1);
 
+ display "check initial price/quantity framework", pnull, xnull;
+
 * set a small demand share for good2
 * only relevant for the commitment term-approach
  xnull("2") = 1.E-2;
@@ -45,8 +48,8 @@ $offtext
            rho               "substit. param."
            sigma             "subst. elasticity"
            p(i)              "observed prices"
-           calib_delta(i,*)  "calibrated deltas -- reporting parameter"
-           calib_gamma(*)    "calibrated gamma  -- reporting parameter"
+
+           calib_results(*,*,*)  "calibration results -- reporting"
  ;
 
  variable
@@ -78,13 +81,18 @@ $offtext
 
  addup_deltas .. 1 =e= sum(i, delta(i));
 
- demand1(i) .. x(i) - mu(i) =e= delta(i)**sigma * (pindex/p(i))** sigma * u;
+ demand1(i) $ [x.range(i) or delta.range(i)] .. x(i) - mu(i) =e= delta(i)**sigma * (pindex/p(i))** sigma * u;
 
  demand2(i) .. x(i) - mu(i) =e= (1/gamma) * (delta(i)*gamma)**sigma * (pindex/p(i))** sigma * u;
 
  index1 ..     pindex =e= sum(i, delta(i)**sigma * p(i)**(1-sigma))**(1/(1-sigma));
 
  index2 ..     pindex =e= (1/gamma) * sum(i, delta(i)**sigma * p(i)**(1-sigma))**(1/(1-sigma));
+
+
+*
+* --- version 1a)  without gamma term in the CES function
+*
 
 
 * first scale the utility to total consumption quantity in benchmark
@@ -100,6 +108,7 @@ $offtext
 
  pindex_null = sum(i, pnull(i) * xnull(i)) / sum(i, xnull(i));
  pindex.l    = pindex_null;
+ pindex.lo   = eps;
  u.fx        = sum(i, xnull(i));
 
  display pindex.l, u.l;
@@ -114,8 +123,10 @@ $offtext
 * automatic calibration test
  if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered");
 
-  calib_delta(i, "version1") = delta.l(i);
-  calib_gamma("version1")    = 0;
+  calib_results("gamma", " ", "version1")    = 0;
+  calib_results("delta", i  , "version1")    = delta.l(i);
+  calib_results("utility"," ","version1")    = u.l;
+  calib_results("pindex", " ","version1")    = pindex.l;
 
 * check if the original CES utility aggregator reproduces the same value
  model cesagg1/ces1/;
@@ -132,8 +143,10 @@ $offtext
  if(cesagg1.suminfes gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
 
 
-* part b: calibrate a CES aggregator with the gamma term
-*         and enforcing the adding-up condition for deltas
+*
+* --- version 2): calibrate a CES aggregator with the gamma term
+*                 and enforce the adding-up condition for deltas
+*
  model calib2 /demand2, index2, addup_deltas/;
 
 
@@ -148,8 +161,11 @@ $offtext
 * automatic calibration test
  if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered");
 
-   calib_delta(i, "version2") = delta.l(i);
-   calib_gamma("version2")    = gamma.l;
+   calib_results("gamma", " ", "version2") = gamma.l;
+   calib_results("delta", i  , "version2") = delta.l(i);
+   calib_results("utility"," ","version2") = u.l;
+   calib_results("pindex", " ","version2") = pindex.l;
+
 
 
 * check if the original CES utility aggregator reproduces the same value
@@ -167,6 +183,50 @@ $offtext
  solve cesagg2 using CNS;
  if(cesagg2.suminfes gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
 
+
+
+* another variant when one of the deltas is fixed to unity
+* then we can not apply the adding up condition
+
+
+ model calib3 /demand2, index2/;
+
+
+  u.fx          = u.l;
+  delta.lo(i)   = eps;
+  delta.up(i)   = +inf;
+  delta.fx("1") = 1;
+  gamma.l       = 1;
+  gamma.lo      = eps;
+  gamma.up      = +inf;
+
+ calib3.solprint   = 1;
+ solve calib3 using CNS;
+
+* automatic calibration test
+ if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered");
+
+   calib_results("gamma", " ", "version2mod") = gamma.l;
+   calib_results("delta", i  , "version2mod") = delta.l(i);
+   calib_results("utility"," ","version2mod") = u.l;
+   calib_results("pindex", " ","version2mod") = pindex.l;
+
+
+* check if the original CES utility aggregator reproduces the same value
+  u.lo        = 0;
+  u.up        = +inf;
+  x.fx(i)     = x.l(i);
+  delta.fx(i) = delta.l(i);
+  mu.fx(i)    = 0;
+  gamma.fx    = gamma.l;
+
+  cesagg2.solprint   = 1;
+  cesagg2.iterlim    = 0;
+ solve cesagg2 using CNS;
+ if(cesagg2.suminfes gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
+
+
+  display calib_results;
 
 *
 * part c) Using a modified CES function form with commitment-terms
@@ -195,8 +255,8 @@ $offtext
 
  parameter results(i,*,*)  "simulated results";
 
- delta.fx(i)  = calib_delta(i,"version1");
- gamma.fx     = calib_gamma("version1");
+ delta.fx(i)  = calib_results("delta", i,   "version1");
+ gamma.fx     = calib_results("gamma", " ", "version1");
 
  model ces_sim1 "simulation model for the first CES approach (without gamma term)" /demand1, index1/;
 
@@ -210,8 +270,8 @@ $offtext
 * set back demand levels to a default
  x.l(i)       = 1;
 
- delta.fx(i)  = calib_delta(i,"version2");
- gamma.fx     = calib_gamma("version2");
+ delta.fx(i)  = calib_results("delta", i,"version2");
+ gamma.fx     = calib_results("gamma", " ", "version2");
 
  model ces_sim2 "simulation model for the second CES approach (with gamma term)" /demand2, index2/;
 
@@ -222,41 +282,152 @@ $offtext
  results(i, "x", "version2") = x.l(i);
 
 
- display "check simulated results ", results;
+
+* set back demand levels to a default
+ x.l(i)       = 1;
+
+ delta.fx(i)  = calib_results("delta", i,   "version2mod");
+ gamma.fx     = calib_results("gamma", " ", "version2mod");
+
+
+ ces_sim2.solprint   = 1;
+ solve ces_sim2 using CNS;
+ if(ces_sim2.numinfes ne 0, abort "problem with simulation CES version 2");
+
+ results(i, "x", "version2mod") = x.l(i);
+ display "check simulated results (should be identical with the versions so far)", results;
 
 
 
- parameter
-          pexp(i)        "expected prices"
-          xexp(i)        "expected demand"
+*
+*   ---   Commitment version, see Witzke et al. (2005)
+*
+
+ set points "calibration points"  / observed, expected/;
+
+ positive variables
+          pcom(i,points)          "prices -- commitment version"
+          xcom(i,points)          "import demand -- commitment version"
+          pindexcom(points)       "price indexes -- commitment version"
+          ucom(points)            "utility -- commitment versions"
  ;
 
 * we include non-zero commitment term for one commodity only
-  mu.fx("1")  = 0;
+  mu.fx("1")    = 0;
+  mu.lo("2")    = -inf;
+  mu.up("2")    = +inf;
+  mu.l ("2")    = -0.5 * xnull("2");
 
 * assume significantly more demand at the same (lowered) relative price for good 2
- pexp(i)     = p(i);
- xexp(i)     = x.l(i);
- xexp("2")   = x.l("2") * 10;
+ pcom.fx(i, "expected")         = p(i);
+ pcom.fx(i, "observed")         = pnull(i);
+ xcom.fx(i, "expected")         = x.l(i);
+ xcom.fx("2", "expected")       = x.l("2") * 10;
+ xcom.fx(i, "observed")         = xnull(i);
+
+* free the quantity variables for good 1 (the one with zero commitment term)
+ xcom.lo(i, "expected") $ (not mu.range(i))   = eps;
+ xcom.up(i, "expected") $ (not mu.range(i))   = +inf;
+
+ option pcom:3:1:1;
+ option xcom:3:1:1;
+ display "price/quantity setting", pcom.l, xcom.l;
+
+ display xnull;
 
  equation
-         isoquant       "the observed point should be on the same isoquant"
+         demand_com(i, points)     "import demand equation"
+         index_com(points)         "price index"
+         ces_com(points)            "utility aggregator"
  ;
 
- isoquant ..   u =e= sum(i, delta(i) * (xnull(i) - mu(i))**rho)**(1/rho);
+ ces_com(points) $ ucom.range(points) ..
+
+     ucom(points) =e= sum(i, delta(i) * (xcom(i,points) - mu(i))**rho)**(1/rho);
+
+ demand_com(i,points) $ [xcom.range(i,points) or delta.range(i)] ..
+
+     xcom(i,points) - mu(i) =e= delta(i)**sigma * (pindexcom(points)/pcom(i,points))** sigma * ucom(points);
+
+ index_com(points) $ pindexcom.range(points)..
+
+     pindexcom(points) =e= sum(i, delta(i)**sigma * pcom(i,points)**(1-sigma))**(1/(1-sigma));
 
 
- model calib_commit "calibration model for the CES commitment version" /index1, demand1, isoquant/;
+ model calib_commit "calibration model for the CES commitment version" /index_com, demand_com/;
 
- x.fx(i)  = xexp(i);
- p(i)     = pexp(i);
-
- mu.lo("2")    = -inf;
- mu.up("2")    = +inf;
- mu.l ("2")    = -1;
-
+*
+*   --- further initialization
+*
  delta.lo(i)  = 0;
  delta.up(i)  = +inf;
+ delta.l (i)  = 0.5;
+
+ pindexcom.lo (points)     = 1.E-1;
+ pindexcom.l  (points)     = 0.5;
+
+ ucom.fx (points)          = u.l;
+
 
  calib_commit.solprint   = 1;
+* calib_commit.iterlim    = 0;
+ calib_commit.holdfixed  = 0;
  solve calib_commit using CNS;
+
+
+
+*
+*   --- Test if we are still at the same isoquant
+*
+  ucom.lo(points)        = 0;
+  ucom.up(points)        = +inf;
+  xcom.fx(i,points)      = xcom.l(i,points);
+  delta.fx(i)            = delta.l(i);
+  mu.fx(i)               = mu.l(i);
+
+ model testu_commit "test utility in the commitment version" /ces_com/;
+
+ solve testu_commit using cns;
+ if(testu_commit.numinfes ne 0, abort "problem with utility test in the commitment version");
+ if(abs(ucom.l("observed") - ucom.l("expected")) gt 1.E-4, abort "not on the same isoquant");
+
+
+
+
+*
+*   ---  Run a test simulation with the calibrated commitment version
+*
+
+ ucom.fx(points)         = ucom.l(points);
+
+* -- if both the deltas and the import demands are fixed then the import demand equation is swithced off
+*    (see the dollar conditionals in the equation definition)
+ xcom.lo(i,"expected")  = eps;
+ xcom.up(i,"expected")  = +inf;
+* -- similarly, we switch of the 'observed' price index equation by fixing the variable
+ pindexcom.fx("observed") = pindexcom.l("observed");
+
+
+solve calib_commit using CNS;
+if(calib_commit.numinfes ne 0, abort "problem with the test simulation with the commitment version");
+
+ results(i, "x", "commitment") = xcom.l(i, "expected");
+
+ display "check simulation results in all versions", results;
+
+$exit
+
+Clearly, the commitment version is able
+to deal with the small share problem
+at the expense of more information (expectations) being necessary
+
+
+----    416 PARAMETER results  simulated results
+
+       version1    version2  version2m~  commitment
+
+1.x       0.827       0.827       0.827       0.525
+2.x       0.039       0.039       0.039       0.389
+
+
+
