@@ -13,7 +13,7 @@ $ontext
   References
   ----------
 
-    (standard):  Rutherford, Thomas F. 1995. “CES Demand Functions: Hints and Formulae.”
+    (standard):  Rutherford, Thomas F. 1995. CES Demand Functions: Hints and Formulae.
 
     (multiplicative calib. term): Kuiper, Marijke, and Frank van Tongeren. 2006.
                                  "Using Gravity to Move Armington -  an Empirical Approach to the Small Initial Trade Share Problem in General Equilibrium Models."
@@ -402,141 +402,88 @@ $offlisting
 *         Demand reactions of initially small demand shares are therefore magnified
 *         compared to the standard CES form approach
 *
-*    -  The multiplicative term is a factor-augmented technological change term
-*    -  The CES specification also contains the 'gamma' term, i.e. Hicks-neutral techn. change
-*    -  Calibrating the multiplicative term requires an additional degree of freedom. This will
-*       be provided by the extra information on expected demand under different relative prices
-*    -  We use the version 2 mod) from above and modify it according to our purposes
-
-$exit
-
- set points "calibration points"  / observed, expected/;
-
- positive variables
-          pcom(i,points)          "prices -- commitment version"
-          xcom(i,points)          "import demand -- commitment version"
-          pindexcom(points)       "price indexes -- commitment version"
-          ucom(points)            "utility -- commitment versions"
- ;
-
-* we include non-zero commitment term for one commodity only
-  mu.fx("1")    = 0;
-  mu.lo("2")    = -inf;
-  mu.up("2")    = +inf;
-  mu.l ("2")    = -0.5 * xnull("2");
-
-* assume significantly more demand at the same (lowered) relative price for good 2
- pcom.fx(i, "expected")         = p(i);
- pcom.fx(i, "observed")         = pnull(i);
- xcom.fx(i, "expected")         = x.l(i);
- xcom.fx("2", "expected")       = x.l("2") * 10;
- xcom.fx(i, "observed")         = xnull(i);
-
-* free the quantity variables for good 1 (the one with zero commitment term)
- xcom.lo(i, "expected") $ (not mu.range(i))   = eps;
- xcom.up(i, "expected") $ (not mu.range(i))   = +inf;
-
- option pcom:3:1:1;
- option xcom:3:1:1;
- display "price/quantity setting", pcom.l, xcom.l;
-
- display xnull;
-
- equation
-         demand_com(i, points)     "import demand equation"
-         index_com(points)         "price index"
-         ces_com(points)            "utility aggregator"
- ;
-
- ces_com(points) $ ucom.range(points) ..
-
-     ucom(points) =e= sum(i, delta(i) * (xcom(i,points) - mu(i))**rho)**(1/rho);
-
- demand_com(i,points) $ [xcom.range(i,points) or delta.range(i)] ..
-
-     xcom(i,points) - mu(i) =e= delta(i)**sigma * (pindexcom(points)/pcom(i,points))** sigma * ucom(points);
-
- index_com(points) $ pindexcom.range(points)..
-
-     pindexcom(points) =e= sum(i, delta(i)**sigma * pcom(i,points)**(1-sigma))**(1/(1-sigma));
-
-
- model calib_commit "calibration model for the CES commitment version" /index_com, demand_com/;
-
+*    -  The multiplicative term is a factor-augmented technological change term (theta)
+*    -  The CES specification also contains the Hicks-neutral techn. change term, but it is kept at constant 1
 *
-*   --- further initialization
+*    (1) The functional form is first calibrated to the observed point as in version 3 above, with theta.fx = 1
+*    (2) Then we fix the deltas and calibrate with the theta's to the expected point 
+
+ 
 *
- delta.lo(i)  = 0;
- delta.up(i)  = +inf;
- delta.l (i)  = 0.5;
-
- pindexcom.lo (points)     = 1.E-1;
- pindexcom.l  (points)     = 0.5;
-
- ucom.fx (points)          = u.l;
+*  --- step 2 from above: Calibrate to expected point
+* 
 
 
- calib_commit.solprint   = 1;
-* calib_commit.iterlim    = 0;
- calib_commit.holdfixed  = 0;
- solve calib_commit using CNS;
+* Expected point 
+* ---------------
+*
+* Assume significantly more demand at the same (lowered) relative price for good 2
+* [That's a textbook case for the small share problem, i.e. we would expect
+* more reaction than made possible by the standard CES functional form]
+*
+ parameter   expected(i,*);
+
+ x.fx(i)                   = x.l(i);
+ x.fx("2")                 = x.l("2") * 10;
+ p(i)                      = pnull(i);
+ p("2")                    = p("2") * .5;
+ display "price/quantity framework in the expected calibration point", p,x.l;
+
+ expected(i,"price")    =  p(i);
+ expected(i,"demand")   =  x.l(i);
+
+
+  Hicks.fx      =  1;
+  u.fx          =  u.l;
+  delta.fx(i)   = calib_results("delta", i,   "version2mod");
+
+  theta.lo(i)   =  1.E-2;
+  theta.up(i)   =  +inf;
+
+  gamma.fx      = calib_results("gamma", " ", "version2mod");
+
+ ces_tchange.solprint   = 1;
+ solve ces_tchange using CNS;
+ if(ces_tchange.numinfes ne 0, abort "problem with calibrating to the expected point with Kuiper-Tongeren");
+
+ calib_results("gamma", " ", "kuiper_tongeren")   =  gamma.l;
+ calib_results("theta", i  , "kuiper_tongeren")   =  theta.l(i);
+ calib_results("delta", i  , "kuiper_tongeren")   =  delta.l(i);
+ calib_results("utility", " ", "kuiper_tongeren") =  u.l;
 
 
 
 *
-*   --- Test if we are still at the same isoquant
-*
-  ucom.lo(points)        = 0;
-  ucom.up(points)        = +inf;
-  xcom.fx(i,points)      = xcom.l(i,points);
-  delta.fx(i)            = delta.l(i);
-  mu.fx(i)               = mu.l(i);
-
- model testu_commit "test utility in the commitment version" /ces_com/;
-
- solve testu_commit using cns;
- if(testu_commit.numinfes ne 0, abort "problem with utility test in the commitment version");
- if(abs(ucom.l("observed") - ucom.l("expected")) gt 1.E-4, abort "not on the same isoquant");
-
-
-
-
-*
-*   ---  Run a test simulation with the calibrated commitment version
+*   --- test if we are still at the same isoquant 
 *
 
- ucom.fx(points)         = ucom.l(points);
+  u.lo        = 0;
+  u.up        = +inf;
 
-* -- if both the deltas and the import demands are fixed then the import demand equation is swithced off
-*    (see the dollar conditionals in the equation definition)
- xcom.lo(i,"expected")  = eps;
- xcom.up(i,"expected")  = +inf;
-* -- similarly, we switch of the 'observed' price index equation by fixing the variable
- pindexcom.fx("observed") = pindexcom.l("observed");
+  x.fx(i)     = x.l(i);
+  delta.fx(i) = delta.l(i);
+  gamma.fx    = gamma.l;
+  theta.fx(i) = theta.l(i);
 
-
-solve calib_commit using CNS;
-if(calib_commit.numinfes ne 0, abort "problem with the test simulation with the commitment version");
-
- results(i, "x", "commitment") = xcom.l(i, "expected");
-
- display "check simulation results in all versions", results;
-
-$ontext
-
-Clearly, the commitment version is able
-to deal with the small share problem
-at the expense of more information (expectations) being necessary
+  test_cesaug.solprint   = 1;
+  test_cesaug.iterlim    = 0;
+ solve test_cesaug using CNS;
+ if(test_cesaug.suminfes gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
+ if(abs(u.l - calib_results("utility", " ", "kuiper_tongeren")) gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
 
 
-----    416 PARAMETER results  simulated results
+*
+*  --- Run a test simulation for the expected price relation
+*
 
-       version1    version2  version2m~  commitment
-
-1.x       0.827       0.827       0.827       0.525
-2.x       0.039       0.039       0.039       0.389
-
-$offtext
+ x.lo(i)         =  eps;
+ x.up(i)         =  10*x.l(i);
+ u.fx            =  u.l;
+ 
+ ces_tchange.solprint   = 1;
+ solve ces_tchange using CNS;
+ if(ces_tchange.numinfes ne 0, abort "problem with the test run at expected relative prices (Kuiper-Tongeren)");
+ if(sum(i,abs(x.l(i) - expected(i,"demand"))) gt 1.E-4, abort "problem with the test run at expected relative prices (Kuiper-Tongeren)");
 
 
 
@@ -545,17 +492,17 @@ $offtext
 *        -------------------------------------------------------
 *
 *        The objective is to draw the indifference curve
-*        with the commitment version of the demand system.
+*        with the Kuiper-van Tongeren approach 
 *
 
 *        number of price experiments
-$setlocal N 100
+$setlocal N 100 
 
 set scen "scenarios for the SCENARIO solver" /s1*s%N%/;
 
 parameter
-  ps_price(scen, i, points)    "prices in the experiments -- assumptions"
-  ps_x(scen, i, points)        "import demands            -- model results"
+  ps_price(scen, i)    "prices in the experiments -- assumptions"
+  ps_x(scen, i)        "import demands            -- model results"
 ;
 
 
@@ -567,27 +514,23 @@ Parameter
           r_s(scen,ma)                           "Solution status report -- generated by GUSS"
 ;
 
-*
-*   --- Relative price of imports from region "2" is varied in a range
-*
-  display  pcom.l;
 
-  ps_price(scen, i, points)       = pcom.l(i, points);
-  ps_price(scen, "2", "expected") = pcom.l("2","expected") * [3 * 1/(%N%-1) * (ord(scen)-1)] + 1.E-1;
+  ps_price(scen, i)        = p(i);
+  ps_price(scen, "2")      = p("2") * [3 * 1/(%N%-1) * (ord(scen)-1)] + 1.E-1;
 
-  option ps_price:3:2:1;
+  option ps_price:3:1:1;
   display ps_price;
 
 set scen_dict   "scenario dictionary (for the GUSS solver option)"
 /
  scen    .   scenario .     ''
- pcom    .   fixed    .     ps_price
- xcom    .   level    .     ps_x
+ p       .   param    .     ps_price
+ x       .   level    .     ps_x
  o       .   opt      .     r_s
 /;
 
 
- solve calib_commit using CNS scenario scen_dict;
+ solve ces_tchange using CNS scenario scen_dict;
 
 *
 *   ---  Some results and model statistics
@@ -595,16 +538,16 @@ set scen_dict   "scenario dictionary (for the GUSS solver option)"
  display "Model statistics: ", r_s;
 
 
- option ps_x:3:2:1;
-* display "solutions for import demand: ", ps_x;
+ option ps_x:3:1:1;
+ display "solutions for import demand: ", ps_x;
 
 *
 *   ---  Prepare one big reporting parameter
 *
-parameter     p_results(scen, i, points, *)   "reporing parameter";
+parameter     p_results(scen, i, *)   "reporing parameter";
 
- p_results(scen, i, points, "price")     = ps_price(scen, i, points);
- p_results(scen, i, points, "demand")    = ps_x(scen, i, points);
+ p_results(scen, i,  "price")     = ps_price(scen, i);
+ p_results(scen, i,  "demand")    = ps_x(scen, i);
 
 
  display p_results;
@@ -620,8 +563,8 @@ parameter     p_results(scen, i, points, *)   "reporing parameter";
 file datafile /plot.dat/;
 put datafile;
 loop(scen,
-           put p_results(scen, "1", "expected", "demand"):10:2;
-           put ' ',p_results(scen, "2", "expected", "demand"):10:2;
+           put p_results(scen, "1", "demand"):10:2;
+           put ' ',p_results(scen, "2", "demand"):10:2;
            put /;
 );
 putclose;
@@ -653,7 +596,5 @@ execute 'call %gnuplot_path%gnuplot plot.plt';
 
 * Use mspaint(Windows) to open image file
 execute 'mspaint plot.png';
-
-
 
 
