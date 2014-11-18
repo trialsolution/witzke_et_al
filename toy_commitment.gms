@@ -12,10 +12,10 @@ $ontext
   References
   ----------
 
-    (standard):  Rutherford, Thomas F. 1995. ìCES Demand Functions: Hints and Formulae.î
+    (standard):  Rutherford, Thomas F. 1995. ‚ÄúCES Demand Functions: Hints and Formulae.‚Äù
 
-    (commitment): Witzke, Peter, Marcel Aden‰uer, Wolfgang Britz, and Thomas Heckelei. 2005.
-                  ìModelling EU Sugar Market Scenarios with a Modified Armington Appoach.î In IATRC Symposium. Sevilla, Spain.
+    (commitment): Witzke, Peter, Marcel Aden√§uer, Wolfgang Britz, and Thomas Heckelei. 2005.
+                  ‚ÄúModelling EU Sugar Market Scenarios with a Modified Armington Appoach.‚Äù In IATRC Symposium. Sevilla, Spain.
 $offtext
 
 $offlisting
