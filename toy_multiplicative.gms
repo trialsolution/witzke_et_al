@@ -91,21 +91,27 @@ $offlisting
 
  ces2 ..      u =e= gamma * sum(i, delta(i) * x(i)**rho)**(1/rho);
 
- ces_aug ..   u =e= (gamma * Hicks) * sum(i, delta(i) * (x(i)*theta(i))**rho)**(1/rho);
+ ces_aug ..   u =e= (gamma * Hicks) * sum(i, delta(i) * ((x(i)*theta(i))**rho))**(1/rho);
 
  addup_deltas .. 1 =e= sum(i, delta(i));
 
  demand1(i) $ [x.range(i) or delta.range(i)] .. x(i) =e= delta(i)**sigma * (pindex/p(i))** sigma * u;
 
- demand2(i) ..    x(i) =e= (1/gamma) * (delta(i)*gamma)**sigma * (pindex/p(i))** sigma * u;
 
- demand_aug(i) .. x(i) =e= (1/gamma) * (delta(i)*gamma*theta(i)**rho)**sigma * (pindex/p(i))**sigma * u;
+
+*
+*   ---     Note that as we included the gamma term in the price index
+*           we have to correct the demand equation with gamma**(sigma-1)
+*
+ demand2(i) ..    x(i) =e= (gamma**(sigma-1)) * (delta(i)**sigma) * (pindex/p(i))** sigma * u;
+
+ demand_aug(i) .. x(i) =e= (gamma**(sigma-1)) * (delta(i)**sigma) * (theta(i)**(rho*sigma)) * (pindex/p(i))**sigma * u;
 
  index1 ..     pindex =e= sum(i, delta(i)**sigma * p(i)**(1-sigma))**(1/(1-sigma));
 
  index2 ..     pindex =e= (1/gamma) * sum(i, delta(i)**sigma * p(i)**(1-sigma))**(1/(1-sigma));
 
- index_aug ..  pindex =e= (1/gamma) * sum(i, delta(i)**sigma * theta(i)**(sigma-rho) * p(i)**(1-sigma))**(1/(1-sigma));
+ index_aug ..  pindex =e= (1/gamma) * sum(i, (delta(i)**sigma) * (theta(i)**(sigma-1)) * (p(i)**(1-sigma)))**(1/(1-sigma));
 
  Hicks_neutral ..   gamma =e= Hicks * gamma.l;
 
@@ -119,8 +125,8 @@ $offlisting
 * then the price index will be the average price
  model calib1 /demand1, index1/;
 
- rho   = 0.5;
- sigma = 2;
+ sigma = 4;
+ rho   = (sigma-1)/sigma;
 
  p(i)    = pnull(i);
  x.fx(i) = xnull(i);
@@ -140,7 +146,7 @@ $offlisting
  calib1.solprint  = 1;
  solve calib1 using CNS;
 * automatic calibration test
- if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered");
+ if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered", pindex_null);
 
   calib_results("gamma", " ", "version1")    = 0;
   calib_results("delta", i  , "version1")    = delta.l(i);
@@ -178,7 +184,7 @@ $offlisting
  solve calib2 using CNS;
 
 * automatic calibration test
- if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered");
+ if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered", pindex_null);
 
    calib_results("gamma", " ", "version2") = gamma.l;
    calib_results("delta", i  , "version2") = delta.l(i);
@@ -278,7 +284,6 @@ $offlisting
 
  display calib_results;
 
-
 *
 *   --- test if the original CES utility aggregator reproduces the same value
 *
@@ -294,8 +299,6 @@ $offlisting
   test_cesaug.iterlim    = 0;
  solve test_cesaug using CNS;
  if(test_cesaug.suminfes gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
-
-
 
 *
 *  --- test scenario to get 'standard CES' reactions
@@ -406,15 +409,15 @@ $offlisting
 *    -  The CES specification also contains the Hicks-neutral techn. change term, but it is kept at constant 1
 *
 *    (1) The functional form is first calibrated to the observed point as in version 3 above, with theta.fx = 1
-*    (2) Then we fix the deltas and calibrate with the theta's to the expected point 
+*    (2) Then we fix the deltas and calibrate with the theta's to the expected point
 
- 
+
 *
 *  --- step 2 from above: Calibrate to expected point
-* 
+*
 
 
-* Expected point 
+* Expected point
 * ---------------
 *
 * Assume significantly more demand at the same (lowered) relative price for good 2
@@ -442,19 +445,31 @@ $offlisting
 
   gamma.fx      = calib_results("gamma", " ", "version2mod");
 
- ces_tchange.solprint   = 1;
- solve ces_tchange using CNS;
- if(ces_tchange.numinfes ne 0, abort "problem with calibrating to the expected point with Kuiper-Tongeren");
+* ces_tchange.solprint   = 1;
+* ces_tchange.iterlim    = 1000;
+* solve ces_tchange using CNS;
+* if(ces_tchange.numinfes ne 0, abort "problem with calibrating to the expected point with Kuiper-Tongeren");
+
+ model calib_kuiper_tongeren /demand_aug.theta, index_aug.pindex/;
+ 
+ calib_kuiper_tongeren.solprint   = 1;
+ solve calib_kuiper_tongeren using MCP;
+ if(calib_kuiper_tongeren.numinfes ne 0, abort "problem with calibrating to the expected point with Kuiper-Tongeren");
+
+
 
  calib_results("gamma", " ", "kuiper_tongeren")   =  gamma.l;
  calib_results("theta", i  , "kuiper_tongeren")   =  theta.l(i);
  calib_results("delta", i  , "kuiper_tongeren")   =  delta.l(i);
  calib_results("utility", " ", "kuiper_tongeren") =  u.l;
+ calib_results("Hicks", " ", "kuiper_tongeren")   =  Hicks.l;
+ calib_results("pindex", " ", "kuiper_tongeren")  =  pindex.l;
 
+ display "check calibrated parameters" , calib_results;
 
 
 *
-*   --- test if we are still at the same isoquant 
+*   --- test if we are still at the same isoquant
 *
 
   u.lo        = 0;
@@ -464,12 +479,23 @@ $offlisting
   delta.fx(i) = delta.l(i);
   gamma.fx    = gamma.l;
   theta.fx(i) = theta.l(i);
+  Hicks.fx    = Hicks.l;
+  pindex.fx   = pindex.l;
 
-  test_cesaug.solprint   = 1;
-  test_cesaug.iterlim    = 0;
+ model isoquant_kuiper /ces_aug.u/;
+
+ isoquant_kuiper.solprint  = 1;
+ isoquant_kuiper.iterlim   = 0;
+ solve isoquant_kuiper using MCP;
+ if(isoquant_kuiper.numinfes ne 0, abort "problem with recovering utility with the CES aggregator");
+
+
+ test_cesaug.solprint   = 1;
+ test_cesaug.iterlim    = 0;
  solve test_cesaug using CNS;
  if(test_cesaug.suminfes gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
  if(abs(u.l - calib_results("utility", " ", "kuiper_tongeren")) gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
+
 
 
 *
@@ -478,13 +504,14 @@ $offlisting
 
  x.lo(i)         =  eps;
  x.up(i)         =  10*x.l(i);
+ pindex.lo       =  eps;
+ pindex.up       =  +inf;
  u.fx            =  u.l;
- 
+
  ces_tchange.solprint   = 1;
  solve ces_tchange using CNS;
  if(ces_tchange.numinfes ne 0, abort "problem with the test run at expected relative prices (Kuiper-Tongeren)");
  if(sum(i,abs(x.l(i) - expected(i,"demand"))) gt 1.E-4, abort "problem with the test run at expected relative prices (Kuiper-Tongeren)");
-
 
 
 *
@@ -492,11 +519,11 @@ $offlisting
 *        -------------------------------------------------------
 *
 *        The objective is to draw the indifference curve
-*        with the Kuiper-van Tongeren approach 
+*        with the Kuiper-van Tongeren approach
 *
 
 *        number of price experiments
-$setlocal N 100 
+$setlocal N 100
 
 set scen "scenarios for the SCENARIO solver" /s1*s%N%/;
 
@@ -560,7 +587,7 @@ parameter     p_results(scen, i, *)   "reporing parameter";
 *
 *   --- Put data points in a .dat file
 *       Note that the 'expected' dimension contains the simulated results
-file datafile /plot.dat/;
+file datafile /plot_multi.dat/;
 put datafile;
 loop(scen,
            put p_results(scen, "1", "demand"):10:2;
@@ -584,7 +611,7 @@ putclose
    'set term png font arial 13'/
    'set output "plot.png"'/
 
-   'plot "plot.dat" using 1:2 title "indifference curve" with lines'
+   'plot "plot_multi.dat" using 1:2 title "indifference curve" with lines'
 ;
 
 
