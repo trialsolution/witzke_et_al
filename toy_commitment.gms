@@ -12,10 +12,10 @@ $ontext
   References
   ----------
 
-    (standard):  Rutherford, Thomas F. 1995. “CES Demand Functions: Hints and Formulae.”
+    (standard):  Rutherford, Thomas F. 1995. "CES Demand Functions: Hints and Formulae."
 
     (commitment): Witzke, Peter, Marcel Adenäuer, Wolfgang Britz, and Thomas Heckelei. 2005.
-                  “Modelling EU Sugar Market Scenarios with a Modified Armington Appoach.” In IATRC Symposium. Sevilla, Spain.
+                  "Modelling EU Sugar Market Scenarios with a Modified Armington Appoach." In IATRC Symposium. Sevilla, Spain.
 $offtext
 
 $offlisting
@@ -42,6 +42,30 @@ $offlisting
 * set a small demand share for good2
 * only relevant for the commitment term-approach
  xnull("2") = 1.E-2;
+
+*
+*   --- Put observed quantities into data files for further plotting 
+*
+file horizontal_obs /horizontal_obs.dat/;
+put horizontal_obs;
+           put '0';
+           put ' ',xnull("2"):10:2;
+           put /;
+           put '2';
+           put ' ',xnull("2"):10:2;
+           put /;
+putclose;
+
+file vertical_obs /vertical_obs.dat/;
+put vertical_obs;
+           put xnull("1"):10:2;
+           put ' ','0';
+           put /;
+           put xnull("1"):10:2;
+           put ' ','2';
+           put /;
+putclose;
+
 
 
  parameter
@@ -99,7 +123,7 @@ $offlisting
 * then the price index will be the average price
  model calib1 /demand1, index1/;
 
- sigma = 2;
+ sigma = 4; 
  rho   = (sigma-1)/sigma;
 
  mu.fx(i)    = 0;
@@ -316,14 +340,14 @@ $offlisting
 * we include non-zero commitment term for one commodity only
   mu.fx("1")    = 0;
   mu.lo("2")    = -inf;
-  mu.up("2")    = +inf;
+  mu.up("2")    = 0;
   mu.l ("2")    = -0.5 * xnull("2");
 
 * assume significantly more demand at the same (lowered) relative price for good 2
  pcom.fx(i, "expected")         = p(i);
  pcom.fx(i, "observed")         = pnull(i);
  xcom.fx(i, "expected")         = x.l(i);
- xcom.fx("2", "expected")       = x.l("2") * 10;
+ xcom.fx("2", "expected")       = x.l("2") * 5;
  xcom.fx(i, "observed")         = xnull(i);
 
 * free the quantity variables for good 1 (the one with zero commitment term)
@@ -362,20 +386,18 @@ $offlisting
 *
  delta.lo(i)  = 0;
  delta.up(i)  = +inf;
- delta.l (i)  = 0.5;
+ delta.l (i)  = calib_results("delta", i,   "version1");
 
- pindexcom.lo (points)     = 1.E-1;
- pindexcom.l  (points)     = 0.5;
+ pindexcom.lo (points)     = 1.E-3;
+ pindexcom.l  (points)     = calib_results("pindex", " ",   "version1");
 
  ucom.fx (points)          = u.l;
-
 
  calib_commit.solprint   = 1;
 * calib_commit.iterlim    = 0;
  calib_commit.holdfixed  = 0;
  solve calib_commit using CNS;
  if(calib_commit.numinfes ne 0, abort "problem with the calibration of the commitment version");
-
 
 *
 *   --- Test if we are still at the same isoquant
@@ -416,23 +438,30 @@ if(calib_commit.numinfes ne 0, abort "problem with the test simulation with the 
 
  display "check simulation results in all versions", results;
 
-$ontext
+*
+*   --- Put expected quantities into data files for further plotting 
+*
+file horizontal /horizontal_commit.dat/;
+put horizontal;
+           put '0';
+           put ' ',xcom.l("2","expected"):10:2;
+           put /;
+           put '2';
+           put ' ',xcom.l("2","expected"):10:2;
+           put /;
+putclose;
 
-Clearly, the commitment version is able
-to deal with the small share problem
-at the expense of more information (expectations) being necessary
+file vertical /vertical_commit.dat/;
+put vertical;
+           put xcom.l("1","expected"):10:2;
+           put ' ','0';
+           put /;
+           put xcom.l("1","expected"):10:2;
+           put ' ','2';
+           put /;
+putclose;
 
-
-----    416 PARAMETER results  simulated results
-
-       version1    version2  version2m~  commitment
-
-1.x       0.827       0.827       0.827       0.525
-2.x       0.039       0.039       0.039       0.389
-
-$offtext
-
-
+execute_unload "xcommit.gdx", xcom;
 
 *
 *   ---  Sensitivity Analysis with the different relative prices
@@ -511,7 +540,7 @@ parameter     p_results(scen, i, points, *)   "reporing parameter";
 *
 *   --- Put data points in a .dat file
 *       Note that the 'expected' dimension contains the simulated results
-file datafile /plot.dat/;
+file datafile /plot_commitment.dat/;
 put datafile;
 loop(scen,
            put p_results(scen, "1", "expected", "demand"):10:2;
@@ -532,10 +561,13 @@ putclose
    'set title  "Price SA with the commitment version"'/
 *   'set key off'/
    'set xrange [0:2]'/
+   'set yrange [0:2]'/
    'set term png font arial 13'/
    'set output "plot.png"'/
 
-   'plot "plot.dat" using 1:2 title "indifference curve" with lines'
+   'plot "plot_commitment.dat" using 1:2 title "indifference curve" with lines, \' /
+   '"horizontal_commit.dat" using 1:2 title "x2 exp." with lines, "vertical_commit.dat" using 1:2 title "x1 exp." with lines, \' /
+   '"horizontal_obs.dat" using 1:2 title "x2 obs." with lines, "vertical_obs.dat" using 1:2 title "x1 obs." with lines' 
 ;
 
 

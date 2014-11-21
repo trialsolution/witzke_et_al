@@ -40,12 +40,12 @@ $offlisting
  pnull(i)    = uniform(0.5,1);
  xnull(i)    = uniform(0.5,1);
 
- display "check initial price/quantity framework", pnull, xnull;
 
 * set a small demand share for good2
 * only relevant for the commitment term-approach
  xnull("2") = 1.E-2;
 
+ display "check initial price/quantity framework", pnull, xnull;
 
  parameter
            rho               "substit. param."
@@ -395,7 +395,6 @@ $offlisting
  display "check simulated results (should be identical with the versions so far)", results;
 
 
-
 *
 *   ---   Kuiper - van Tongeren (2006)
 *
@@ -424,10 +423,36 @@ $offlisting
 * [That's a textbook case for the small share problem, i.e. we would expect
 * more reaction than made possible by the standard CES functional form]
 *
+*
+*  --- A difficulty with the Kuiper-Tongeren approach arises:
+*      With how much would the demand for imports from country 1 decrease?
+*      It is normally defined by gravity estimates. Here we need to provide
+*      an estimate that would keep utility at a more-or-less constant level.
+*     
+*      One solution is to use the import demand from country 1 calculated by the commitment version.
+*
  parameter   expected(i,*);
 
+
+
  x.fx(i)                   = x.l(i);
- x.fx("2")                 = x.l("2") * 10;
+ x.fx("2")                 = x.l("2") * 5;
+*$ontext
+*
+*  --- use the same expected point as achieved by 
+*      the commitment version
+*
+variable xcom;
+$gdxin xcommit
+$load xcom
+$gdxin
+ x.fx("1")  =  xcom.l("1","expected");
+*$offtext
+
+* -- alternatively, simply use a guesstimate for the decrease
+ x.fx("1")  =  x.l("1") / 2;
+
+
  p(i)                      = pnull(i);
  p("2")                    = p("2") * .5;
  display "price/quantity framework in the expected calibration point", p,x.l;
@@ -512,6 +537,30 @@ $offlisting
  solve ces_tchange using CNS;
  if(ces_tchange.numinfes ne 0, abort "problem with the test run at expected relative prices (Kuiper-Tongeren)");
  if(sum(i,abs(x.l(i) - expected(i,"demand"))) gt 1.E-4, abort "problem with the test run at expected relative prices (Kuiper-Tongeren)");
+
+
+*
+*   --- Put expected quantities into data files for further plotting 
+*
+file horizontal /horizontal_multi.dat/;
+put horizontal;
+           put '0';
+           put ' ',x.l("2"):10:2;
+           put /;
+           put '2';
+           put ' ',x.l("2"):10:2;
+           put /;
+putclose;
+
+file vertical /vertical_multi.dat/;
+put vertical;
+           put x.l("1"):10:2;
+           put ' ','0';
+           put /;
+           put x.l("1"):10:2;
+           put ' ','2';
+           put /;
+putclose;
 
 
 *
@@ -605,13 +654,15 @@ put pltfile;
 putclose
    'set xlabel "import demand from country 1"'/
    'set ylabel "import demand from country 2"'/
-   'set title  "Price SA with the commitment version"'/
+   'set title  "Price SA with Kuiper-van Tongeren"'/
 *   'set key off'/
    'set xrange [0:2]'/
+   'set yrange [0:2]'/
    'set term png font arial 13'/
    'set output "plot.png"'/
 
-   'plot "plot_multi.dat" using 1:2 title "indifference curve" with lines'
+   'plot "plot_multi.dat" using 1:2 title "indifference curve" with lines, \' /
+   '"horizontal_multi.dat" using 1:2 title " " with lines, "vertical_multi.dat" using 1:2 title " " with lines'
 ;
 
 
