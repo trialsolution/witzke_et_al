@@ -99,8 +99,9 @@ $offlisting
 * then the price index will be the average price
  model calib1 /demand1, index1/;
 
- rho   = 0.5;
  sigma = 2;
+ rho   = (sigma-1)/sigma;
+
  mu.fx(i)    = 0;
 
  p(i)    = pnull(i);
@@ -373,7 +374,7 @@ $offlisting
 * calib_commit.iterlim    = 0;
  calib_commit.holdfixed  = 0;
  solve calib_commit using CNS;
-
+ if(calib_commit.numinfes ne 0, abort "problem with the calibration of the commitment version");
 
 
 *
