@@ -21,6 +21,15 @@ $ontext
 
 $offtext
 
+
+
+*
+*
+*   --- sets and parameters for gnuplotxyz
+*
+$setlocal gnuplot_path 'C:\Users\himicmi\Downloads\gnuplot\bin\'
+
+
 $offlisting
 
 *1) with our without the gamma term (productivity mulitplier)
@@ -513,7 +522,6 @@ $offtext
 
  ces_tchange.solprint  = 1;
  solve ces_tchange using CNS;
-* automatic calibration test
  if(ces_tchange.suminfes gt 1.E-4, abort "augmented CES could not be calibrated to expected point", calib_results);
 
    calib_results("gamma", " ", "tchange","expected") = gamma.l;
@@ -611,7 +619,7 @@ model mod_KVT /index_aug, demand_aug, transition/;
  mod_KVT.solprint   = 1;
  mod_KVT.iterlim    = 0;
  solve mod_KVT using CNS;
- if(ces_sim1.numinfes ne 0, abort "problem with replicating benchmark with the MODIFIED KVT");
+ if(mod_KVT.numinfes ne 0, abort "problem with replicating benchmark with the MODIFIED KVT");
 
 
 *
@@ -762,8 +770,6 @@ putclose
 ;
 
 
-* sets and parameters for gnuplotxyz
-$setlocal gnuplot_path 'S:\util\gnuplot\bin\'
 
 * Use Gnuplot to generate picture
 execute 'call %gnuplot_path%gnuplot plot.plt';
