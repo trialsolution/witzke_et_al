@@ -91,8 +91,6 @@ $offlisting
 
 * dual approach yielding Hicksian demand curves
           demand_aug(i)      "Hicksian demand, factor-aug. version"
-          index1             "price index, version 1"
-          index2             "price index, version 2"
           index_aug          "price index, factor-aug. version"
 
           Hicks_neutral      "Hicks neutral technological change"
@@ -184,18 +182,9 @@ $offlisting
   delta.up(i)   = +inf;
 
 *
-*   ---     We fix one of the share parameters to unity for computational reasons
-*           Note that as a result we can not force the adding-up condition anymore
+*   ---     We fix the scale parameter (gamma) to unity 
 *
-  delta.fx("1") = 1;
-
-
-*
-*   ---     Initialization for the CES scale parameter
-*
-  gamma.l       = 1;
-  gamma.lo      = 0;
-  gamma.up      = +inf;
+  gamma.fx      = 1;
 
  ces_tchange.solprint   = 1;
  solve ces_tchange using CNS;
@@ -211,6 +200,7 @@ $offlisting
 
   option calib_results:3:2:2;
 
+
 *
 *   --- test if the calibrated modle recovers utility
 *
@@ -220,7 +210,6 @@ $offlisting
   u.up        = +inf;
   x.fx(i)     = x.l(i);
   delta.fx(i) = delta.l(i);
-  gamma.fx    = gamma.l;
 
   test_cesaug.solprint   = 1;
   test_cesaug.iterlim    = 0;
@@ -406,6 +395,8 @@ $offtext
    calib_results("price", i  ,"tchange","expected")  = p(i);
    calib_results("demand", i  ,"tchange","expected") = x.l(i);
    calib_results("Hicks", " ", "tchange","expected") = Hicks.l;
+
+
 
 *
 *   --- Calibration of the linear price difference function (modified KVT approach)
