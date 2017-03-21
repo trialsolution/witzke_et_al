@@ -3,14 +3,6 @@ $ontext
   of the modified Armington import demand system
 
 
-  we took over the following CES versions from toy_commitment.gms:
-  1) NOT including productivity multiplier term (gamma) -- version 1 below
-  2) including productivity multiplier term (gamma)     -- version 2 below
-  3) using a modified CES function form with commitment-terms
-
-  - by including gamma we can force the adding up condition on the deltas
-  - in all cases the benchmark utility is scaled to total demand quantity
-  - the price index in these cases is scaled to the average price
 
   References
   ----------
@@ -29,47 +21,36 @@ $offlisting
  set i  "goods" /1*2/;
 
 
-* input data
- option seed=12234;
-
+* 
+*
+*   ---    define benchmark input data
+* 
  parameter
           pnull(i)           "prices"
           xnull(i)           "demand"
           pindex_null        "price index"
  ;
+
+* set a random price relation for benchmark
+ option seed=12234;
  pnull(i)    = uniform(0.5,1);
- xnull(i)    = uniform(0.5,1);
+
+
+
+
+*
+*   ---    Initial demand for consumed goods
+*
+*testing calibration behaviour if good 1 is small compared to good2
+ xnull("1") = 0.2;
+ xnull("2") = 0.1;
 
  display "check initial price/quantity framework", pnull, xnull;
 
-* set a small demand share for good2
-* only relevant for the commitment term-approach
- xnull("2") = 1.E-2;
 
 *
-*   --- Put observed quantities into data files for further plotting
-*
-file horizontal_obs /horizontal_obs.dat/;
-put horizontal_obs;
-           put '0';
-           put ' ',xnull("2"):10:2;
-           put /;
-           put '2';
-           put ' ',xnull("2"):10:2;
-           put /;
-putclose;
-
-file vertical_obs /vertical_obs.dat/;
-put vertical_obs;
-           put xnull("1"):10:2;
-           put ' ','0';
-           put /;
-           put xnull("1"):10:2;
-           put ' ','2';
-           put /;
-putclose;
-
-
+*   ---    model setup; parameters, variables and equations
+* 
 
  parameter
            rho               "substit. param."
@@ -77,6 +58,8 @@ putclose;
            p(i)              "observed prices"
 
            calib_results(*,*,*)  "calibration results -- reporting"
+           results(i,*,*)        "simulated results"
+
  ;
 
  variable
@@ -90,71 +73,91 @@ putclose;
 
  equation
           ces1               "utility aggregator, version 1"
-          ces2               "utility aggregator, version 2"
-          addup_deltas       "adding up condition for deltas"
 
 
 * dual approach yielding Hicksian demand curves
           demand1(i)         "Hicksian demand curves, version 1"
-          demand2(i)         "Hicksian demand curves, version 2"
           index1             "price index, version 1"
-          index2             "price index, version 2"
 
  ;
 
  ces1 ..   u =e= sum(i, delta(i) * (x(i) - mu(i))**rho)**(1/rho);
 
- ces2 ..   u =e= gamma * sum(i, delta(i) * (x(i) - mu(i))**rho)**(1/rho);
-
- addup_deltas .. 1 =e= sum(i, delta(i));
-
  demand1(i) $ [x.range(i) or delta.range(i)] .. x(i) - mu(i) =e= delta(i)**sigma * (pindex/p(i))** sigma * u;
-
- demand2(i) .. x(i) - mu(i) =e= (1/gamma) * (delta(i)*gamma)**sigma * (pindex/p(i))** sigma * u;
 
  index1 ..     pindex =e= sum(i, delta(i)**sigma * p(i)**(1-sigma))**(1/(1-sigma));
 
- index2 ..     pindex =e= (1/gamma) * sum(i, delta(i)**sigma * p(i)**(1-sigma))**(1/(1-sigma));
 
 
 *
-* --- version 1a)  without gamma term in the CES function
-*
-
-
-* first scale the utility to total consumption quantity in benchmark
-* then the price index will be the average price
- model calib1 /demand1, index1/;
-
+*   ---    Model parameterization
+*          Exogenous substitution elasticity 
+* 
  sigma = 4;
  rho   = (sigma-1)/sigma;
 
+
+
+
+
+*
+* ---  I)  first calibrate the standard CES demand system (commitment terms fixed to zero) 
+*
+
  mu.fx(i)    = 0;
 
+
+
+
+*
+*   ---     CES without gamma term 
+*           Dual approach; the model consists of a share equation and a price index equation
+* 
+*      
+model calib1 /demand1, index1/;
+
+
+*
+*   ---    initialization for the standard CES calibraiton
+* 
  p(i)    = pnull(i);
  x.fx(i) = xnull(i);
 
+
+
+* scale utility to total consumption quantity in benchmark
+* => the price index will be the average price
  pindex_null = sum(i, pnull(i) * xnull(i)) / sum(i, xnull(i));
  pindex.l    = pindex_null;
- pindex.lo   = eps;
+
+
  u.fx        = sum(i, xnull(i));
 
- display pindex.l, u.l;
+ display "show initial price index and utility level", pindex.l, u.l;
 
-*  initialize
+*  initialize bounds
+ pindex.lo   = eps;
+
  delta.l (i)   = 1;
  delta.lo(i)   = eps;
 
 
  calib1.solprint  = 1;
  solve calib1 using CNS;
-* automatic calibration test
+
  if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered");
 
+
+*  reporting
   calib_results("gamma", " ", "version1")    = 0;
   calib_results("delta", i  , "version1")    = delta.l(i);
   calib_results("utility"," ","version1")    = u.l;
   calib_results("pindex", " ","version1")    = pindex.l;
+
+* abort "check 1st calibration approach", calib_results;
+
+
+
 
 * check if the original CES utility aggregator reproduces the same value
  model cesagg1/ces1/;
@@ -171,165 +174,66 @@ putclose;
  if(cesagg1.suminfes gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
 
 
-*
-* --- version 2): calibrate a CES aggregator with the gamma term
-*                 and enforce the adding-up condition for deltas
-*
- model calib2 /demand2, index2, addup_deltas/;
 
-
-  u.fx          = u.l;
-  delta.lo(i)   = eps;
-  delta.up(i)   = +inf;
-  gamma.l       = 1;
-
- calib2.solprint   = 1;
- solve calib2 using CNS;
-
-* automatic calibration test
- if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered");
-
-   calib_results("gamma", " ", "version2") = gamma.l;
-   calib_results("delta", i  , "version2") = delta.l(i);
-   calib_results("utility"," ","version2") = u.l;
-   calib_results("pindex", " ","version2") = pindex.l;
-
-
-
-* check if the original CES utility aggregator reproduces the same value
- model cesagg2 /ces2/;
-
-  u.lo        = 0;
-  u.up        = +inf;
-  x.fx(i)     = x.l(i);
-  delta.fx(i) = delta.l(i);
-  mu.fx(i)    = 0;
-  gamma.fx    = gamma.l;
-
-  cesagg2.solprint   = 1;
-  cesagg2.iterlim    = 0;
- solve cesagg2 using CNS;
- if(cesagg2.suminfes gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
-
-
-
-* another variant when one of the deltas is fixed to unity
-* then we can not apply the adding up condition
-
-
- model calib3 /demand2, index2/;
-
-
-  u.fx          = u.l;
-  delta.lo(i)   = eps;
-  delta.up(i)   = +inf;
-  delta.fx("1") = 1;
-  gamma.l       = 1;
-  gamma.lo      = eps;
-  gamma.up      = +inf;
-
- calib3.solprint   = 1;
- solve calib3 using CNS;
-
-* automatic calibration test
- if(abs(pindex.l - pindex_null) gt 1.E-4, abort "price index not recovered");
-
-   calib_results("gamma", " ", "version2mod") = gamma.l;
-   calib_results("delta", i  , "version2mod") = delta.l(i);
-   calib_results("utility"," ","version2mod") = u.l;
-   calib_results("pindex", " ","version2mod") = pindex.l;
-
-
-* check if the original CES utility aggregator reproduces the same value
-  u.lo        = 0;
-  u.up        = +inf;
-  x.fx(i)     = x.l(i);
-  delta.fx(i) = delta.l(i);
-  mu.fx(i)    = 0;
-  gamma.fx    = gamma.l;
-
-  cesagg2.solprint   = 1;
-  cesagg2.iterlim    = 0;
- solve cesagg2 using CNS;
- if(cesagg2.suminfes gt 1.E-4, abort "problem with recovering utility with the CES aggregator");
-
-
-  display calib_results;
-
+  display "check calibrated parameters", calib_results;
 
 *
-* part c) Using a modified CES function form with commitment-terms
+*         Using a modified CES function form with commitment-terms
 *         The approach allows to deal with the small share problem
 *         (and with the problem of zero benchmark demand)
 *         Demand reactions of initially small demand shares are therefore magnified
 *         compared to the standard CES form approach
 *
-*    -  Note that the above ces1 and ces2 equations already contain a commitment term "mu"
+*    -  Note that the above ces1 equations already contain a commitment term "mu"
 *    -  Calibrating the commitment term requires an additional degree of freedom. This will
 *       be provided by the extra information on expected demand under different relative prices
 
 
-*  test scenario to get a 'standard CES' reaction
-*  (Later we will compare the reaction with the commitment CES to this benchmark)
+
+
+*
+*   ---     II) test scenario to get a 'standard CES' reaction
+*           (Later we will compare the reaction with the commitment CES to this benchmark)
+* 
+* 
 *
 *  - relative price of good decreases significantly
-*  - here we also compare the reaction with CES version 1 and version 2
 
+* price of good 2 drops to half
  p("2")       = p("2") * .5;
+
+* free quantity variables to get standard CES reaction
  x.lo(i)      = eps;
  x.up(i)      = +inf;
+
+
  pindex.lo    = eps;
  pindex.up    = +inf;
+
+* fix utility approach
  u.fx         = u.l;
 
- parameter results(i,*,*)  "simulated results";
 
  delta.fx(i)  = calib_results("delta", i,   "version1");
- gamma.fx     = calib_results("gamma", " ", "version1");
 
- model ces_sim1 "simulation model for the first CES approach (without gamma term)" /demand1, index1/;
 
- ces_sim1.solprint   = 1;
- solve ces_sim1 using CNS;
- if(ces_sim1.numinfes ne 0, abort "problem with simulation CES version 1");
+
+*
+*   ---    same model as above for the calibration, but now the calibrated parameters are fix
+* 
+
+ calib1.solprint   = 1;
+ solve calib1 using CNS;
+ if(calib1.numinfes ne 0, abort "problem with simulation CES version 1");
 
  results(i, "x", "version1") = x.l(i);
 
 
-* set back demand levels to a default
- x.l(i)       = 1;
-
- delta.fx(i)  = calib_results("delta", i,"version2");
- gamma.fx     = calib_results("gamma", " ", "version2");
-
- model ces_sim2 "simulation model for the second CES approach (with gamma term)" /demand2, index2/;
-
- ces_sim2.solprint   = 1;
- solve ces_sim2 using CNS;
- if(ces_sim2.numinfes ne 0, abort "problem with simulation CES version 2");
-
- results(i, "x", "version2") = x.l(i);
-
-
-
-* set back demand levels to a default
- x.l(i)       = 1;
-
- delta.fx(i)  = calib_results("delta", i,   "version2mod");
- gamma.fx     = calib_results("gamma", " ", "version2mod");
-
-
- ces_sim2.solprint   = 1;
- solve ces_sim2 using CNS;
- if(ces_sim2.numinfes ne 0, abort "problem with simulation CES version 2");
-
- results(i, "x", "version2mod") = x.l(i);
- display "check simulated results (should be identical with the versions so far)", results;
-
 
 
 *
-*   ---   Commitment version, see Witzke et al. (2005)
+*   ---   III.)  Commitment version, see Witzke et al. (2005)
+*                Set up modified Armington model, calibrate and solve
 *
 
  set points "calibration points"  / observed, expected/;
@@ -341,33 +245,9 @@ putclose;
           ucom(points)            "utility -- commitment versions"
  ;
 
- parameter          gradient(points)        "gradient -- relative prices";
+ parameter          tangent(points)        "tangent to isoquant -- relative prices for reporting";
 
-* we include non-zero commitment term for one commodity only
-  mu.fx("1")    = 0;
-  mu.lo("2")    = -inf;
-  mu.up("2")    = 0;
-  mu.l ("2")    = -0.5 * xnull("2");
 
-* assume significantly more demand at the same (lowered) relative price for good 2
- pcom.fx(i, "expected")         = p(i);
- pcom.fx(i, "observed")         = pnull(i);
-
- gradient(points)               = (-1) * pcom.l("1", points) / pcom.l("2", points);
- xcom.fx(i, "expected")         = x.l(i);
- xcom.fx("2", "expected")       = x.l("2") * 5;
- xcom.fx(i, "observed")         = xnull(i);
-
-* free the quantity variables for good 1 (the one with zero commitment term)
- xcom.lo(i, "expected") $ (not mu.range(i))   = eps;
- xcom.up(i, "expected") $ (not mu.range(i))   = +inf;
-
- option pcom:3:1:1;
- option xcom:3:1:1;
- display "price/quantity setting", pcom.l, xcom.l;
-* abort "check gradients", gradient, xcom.l;
-
- display xnull;
 
  equation
          demand_com(i, points)     "import demand equation"
@@ -380,6 +260,8 @@ putclose;
      ucom(points) =e= sum(i, delta(i) * (xcom(i,points) - mu(i))**rho)**(1/rho);
 
  demand_com(i,points) $ [xcom.range(i,points) or delta.range(i)] ..
+* -- to enable working with fixed deltas as well
+* demand_com(i,points) $ [xcom.range(i,points) or delta.range(i) or mu.range(i)] ..
 
      xcom(i,points) - mu(i) =e= delta(i)**sigma * (pindexcom(points)/pcom(i,points))** sigma * ucom(points);
 
@@ -390,17 +272,68 @@ putclose;
 
  model calib_commit "calibration model for the CES commitment version" /index_com, demand_com/;
 
+
+
 *
-*   --- further initialization
+*   ---    Initialization
+* 
+
+* we include non-zero commitment term for one commodity only
+  mu.fx("1")    = 0;
+  mu.lo("2")    = 0;
+  mu.up("2")    = +inf;
+  mu.l ("2")    = 0.5 * xnull("2");
+
+
+*  relative prices
+ pcom.fx(i, "expected")         = p(i);
+ pcom.fx(i, "observed")         = pnull(i);
+ tangent(points)               = (-1) * pcom.l("1", points) / pcom.l("2", points);
+
+
+
+* assume significantly more demand at the same (lowered) relative price for good 2
+* expected demand is initialized with standard CES reaction to price changes
+* then increased for good 2
+ xcom.fx(i, "expected")         = x.l(i);
+ xcom.fx("2", "expected")       = x.l("2");
+ xcom.fx("1", "expected")       = x.l("1");
+
+ xcom.fx(i, "observed")         = xnull(i);
+
+* free the quantity variables for good 1 (the one with zero commitment term)
+* demand adjusts during calibration
+ xcom.lo(i, "expected") $ (not mu.range(i))   = eps;
+ xcom.up(i, "expected") $ (not mu.range(i))   = +inf;
+
+ option pcom:3:1:1;
+ option xcom:3:1:1;
+ display "price/quantity setting", pcom.l, xcom.l;
+
+
+
+
+
+
 *
- delta.lo(i)  = 0;
+*   ---  share parameters are calibrated simultaneously 
+*
+ delta.lo(i)  = eps;
  delta.up(i)  = +inf;
- delta.l (i)  = calib_results("delta", i,   "version1");
+ delta.l (i)  = calib_results("delta", i,   "version1") * (p(i)/pnull(i));
 
- pindexcom.lo (points)     = 1.E-3;
- pindexcom.l  (points)     = calib_results("pindex", " ",   "version1");
 
+
+*
+*   ---    price index will adjust
+* 
+ pindexcom.lo (points)     = eps;
+ pindexcom.l  (points)     = calib_results("pindex", " ",   "version1") ;
+
+
+*  still fix utility assumption
  ucom.fx (points)          = u.l;
+
 
  calib_commit.solprint   = 1;
 * calib_commit.iterlim    = 0;
@@ -448,30 +381,18 @@ if(calib_commit.numinfes ne 0, abort "problem with the test simulation with the 
 
  display "check simulation results in all versions", results;
 
-*
-*   --- Put expected quantities into data files for further plotting
-*
-file horizontal /horizontal_commit.dat/;
-put horizontal;
-           put '0';
-           put ' ',xcom.l("2","expected"):10:2;
-           put /;
-           put '2';
-           put ' ',xcom.l("2","expected"):10:2;
-           put /;
-putclose;
 
-file vertical /vertical_commit.dat/;
-put vertical;
-           put xcom.l("1","expected"):10:2;
-           put ' ','0';
-           put /;
-           put xcom.l("1","expected"):10:2;
-           put ' ','2';
-           put /;
-putclose;
 
-execute_unload "xcommit.gdx", xcom;
+
+$exit
+*
+*   --- Prepare plot
+*
+
+*  requires a gnuplot local installation 
+$setlocal gnuplot_path 'C:\Users\Dev\gnuplot\bin\'
+
+
 
 *
 *   ---  Sensitivity Analysis with the different relative prices
@@ -543,9 +464,6 @@ parameter     p_results(scen, i, points, *)   "reporing parameter";
  display p_results;
 
 
-*
-*   --- Prepare plot
-*
 
 *
 *   --- Put data points in a .dat file
@@ -559,6 +477,12 @@ loop(scen,
 );
 putclose;
 
+set axis   /x,y/;
+parameter plotrange(axis);
+
+  plotrange("x") =  xcom.l("2","expected") * 3.;
+  plotrange("y") =  xcom.l("1","observed") * 2.;
+
 
 *
 *   --- Prepare GNUPLOT script
@@ -571,8 +495,8 @@ putclose
    'set ylabel "import demand from country 2"'/
    'set title  "Price SA with the commitment version"'/
 *   'set key off'/
-   'set xrange [0:2]'/
-   'set yrange [0:2]'/
+   'set xrange [0:', plotrange("x"), ']'/
+   'set yrange [0:', plotrange("y"), ']'/
    'set term png font arial 13'/
    'set output "plot.png"'/
 
@@ -584,14 +508,12 @@ putclose
    'plot "plot_commitment.dat" using 1:2 title "indifference curve" with lines, \' /
 
 *  -- add the gradients (showing optimal relative prices) both at the observed and expected points
-    gradient("observed"),  '*(x-', xnull("1"), ')  +  ', xnull("2") ,',\ ' /
-    gradient("expected"),  '*(x-', xcom.l("1","expected"), ')  +  ', xcom.l("2","expected")
+    tangent("observed"),  '*(x-', xnull("1"), ')  +  ', xnull("2") ,',\ ' /
+    tangent("expected"),  '*(x-', xcom.l("1","expected"), ')  +  ', xcom.l("2","expected")
 
 ;
 
 
-* sets and parameters for gnuplotxyz
-$setlocal gnuplot_path 'C:\Users\Dev\gnuplot\bin\'
 
 * Use Gnuplot to generate picture
 execute 'call %gnuplot_path%gnuplot plot.plt';
